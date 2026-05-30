@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Moodle Test Solver Helper",
+  "version": "0.1.11",
+  "description": "Reads Moodle questions on edu.gubkin.ru and shows answers from the local lecture index.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://edu.gubkin.ru/*",
+    "http://127.0.0.1:8765/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://edu.gubkin.ru/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Moodle Test Solver Helper",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "toggle-solver": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Toggle Moodle Test Solver Helper"
+    }
+  }
+}

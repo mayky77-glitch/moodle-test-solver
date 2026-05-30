@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <title>Test Solver</title>
+    <style>
+      body {
+        width: 260px;
+        margin: 0;
+        padding: 14px;
+        font: 14px/1.4 Arial, sans-serif;
+        background: #111827;
+        color: #f9fafb;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 8px 10px;
+        border: 1px solid #4b5563;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        cursor: pointer;
+      }
+      .muted {
+        margin-top: 10px;
+        color: #9ca3af;
+        font-size: 12px;
+      }
+      .status {
+        color: #93c5fd;
+      }
+      .switch-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+      label {
+        display: block;
+        margin-top: 12px;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 4px;
+        padding: 7px 8px;
+        border: 1px solid #4b5563;
+        border-radius: 8px;
+        background: #1f2937;
+        color: #f9fafb;
+      }
+      input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+      }
+      #saveBackend {
+        background: #374151;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <strong>Test Solver</strong>
+      <span id="status" class="status">...</span>
+    </div>
+    <div id="version" class="muted">content: unknown</div>
+    <button id="toggle" type="button">Переключить</button>
+    <label class="switch-row">
+      <input id="overlayVisible" type="checkbox">
+      Показывать окно с ответом
+    </label>
+    <label class="switch-row">
+      <input id="autoSelectEnabled" type="checkbox">
+      Автоматически выбирать ответ
+    </label>
+    <label for="manualAnswerText">Точный ответ из переменной</label>
+    <input id="manualAnswerText" type="text" placeholder="Оставь пустым, чтобы брать ответ из backend">
+    <button id="saveManualAnswer" type="button">Сохранить ответ</button>
+    <label for="backendUrl">Backend URL</label>
+    <input id="backendUrl" type="url" placeholder="http://127.0.0.1:8765">
+    <button id="saveBackend" type="button">Сохранить backend</button>
+    <button id="resetPanel" type="button">Сбросить панель</button>
+    <div id="backendStatus" class="muted"></div>
+    <div class="muted">Hotkey: Alt+Shift+S. Можно изменить в chrome://extensions/shortcuts</div>
+    <script src="popup.js"></script>
+  </body>
+</html>

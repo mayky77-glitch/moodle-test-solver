@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.chrome-profile/
+data/
+lectures/
+*.egg-info/
+.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
