@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="test-solver")
     parser.add_argument("--db", default="data/questions.sqlite", help="Path to SQLite database")
     parser.add_argument("--csv", default="data/questions.csv", help="Path to CSV export")
+    parser.add_argument("--lecture-db", default="data/lectures.sqlite", help="Shared SQLite database for lecture imports")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     ingest = subparsers.add_parser("ingest", help="Import lecture files")
@@ -88,14 +89,17 @@ def main(argv: list[str] | None = None) -> int:
             web_cache_ttl=args.web_cache_ttl,
             web_total_timeout=args.web_total_timeout,
             web_negative_cache_ttl=args.web_negative_cache_ttl,
+            lecture_db_path=args.lecture_db,
         ).serve(args.host, args.port)
         return 0
 
-    store = QuestionStore(args.db)
+    store_path = args.lecture_db if args.command == "ingest" else args.db
+    csv_path = args.csv
+    store = QuestionStore(store_path)
     try:
         if args.command == "ingest":
             count = ingest_paths(store, args.paths)
-            store.export_csv(args.csv)
+            store.export_csv(csv_path)
             print(f"Imported {count} lecture file(s).")
             return 0
         if args.command == "export":

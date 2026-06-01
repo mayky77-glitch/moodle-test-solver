@@ -18,7 +18,7 @@ from .web_search import web_answer
 from .web_search_v2 import web_answer_v2
 
 
-BACKEND_VERSION = "0.1.11-webfix"
+BACKEND_VERSION = "0.1.12-multidb"
 
 
 class SolverServer:
@@ -33,9 +33,11 @@ class SolverServer:
         web_cache_ttl: int = 86400,
         web_total_timeout: float = 6.0,
         web_negative_cache_ttl: int = 600,
+        lecture_db_path: str | None = None,
     ) -> None:
         self.db_path = db_path
         self.csv_path = csv_path
+        self.lecture_db_path = lecture_db_path or db_path
         self.min_confidence = min_confidence
         self.web_search_enabled = web_search_enabled
         self.web_timeout = web_timeout
@@ -61,12 +63,17 @@ class SolverServer:
                 self._send_json({"error": "not_found"}, status=404)
 
             def do_POST(self) -> None:
-                if self.path not in {"/answer", "/correct"}:
+                if self.path not in {"/answer", "/correct", "/stats"}:
                     self._send_json({"error": "not_found"}, status=404)
                     return
                 try:
                     payload = self._read_json()
-                    response = server_state.correct(payload) if self.path == "/correct" else server_state.answer(payload)
+                    if self.path == "/correct":
+                        response = server_state.correct(payload)
+                    elif self.path == "/stats":
+                        response = server_state.stats(payload)
+                    else:
+                        response = server_state.answer(payload)
                     self._send_json(response)
                 except Exception as error:
                     traceback.print_exc()
@@ -97,9 +104,11 @@ class SolverServer:
         httpd.serve_forever()
 
     def answer(self, payload: dict[str, Any]) -> dict[str, Any]:
-        store = QuestionStore(self.db_path)
+        db_path, csv_path, quiz_context = self._paths_for_payload(payload)
+        store = QuestionStore(db_path)
+        lecture_store = QuestionStore(self.lecture_db_path)
         try:
-            index = LectureIndex(store)
+            index = LectureIndex(lecture_store)
             engine = AnswerEngine(store, index, min_confidence=self.min_confidence)
             results = []
             for item in payload.get("questions", []):
@@ -170,18 +179,22 @@ class SolverServer:
                         "backendVersion": BACKEND_VERSION,
                     }
                 )
-            store.export_csv(self.csv_path)
+            store.export_csv(csv_path)
             return {
                 "ok": True,
                 "results": results,
-                "csv": str(Path(self.csv_path).resolve()),
+                "csv": str(csv_path.resolve()),
+                "db": str(db_path.resolve()),
+                "quizContext": quiz_context,
                 "backendVersion": BACKEND_VERSION,
             }
         finally:
             store.close()
+            lecture_store.close()
 
     def correct(self, payload: dict[str, Any]) -> dict[str, Any]:
-        store = QuestionStore(self.db_path)
+        db_path, csv_path, quiz_context = self._paths_for_payload(payload)
+        store = QuestionStore(db_path)
         try:
             results = []
             saved = 0
@@ -274,7 +287,7 @@ class SolverServer:
                             "excerpt": f"save error: {error}",
                         }
                     )
-            store.export_csv(self.csv_path)
+            store.export_csv(csv_path)
             return {
                 "ok": True,
                 "saved": saved,
@@ -284,23 +297,37 @@ class SolverServer:
                 "incorrect": incorrect,
                 "partial": partial,
                 "results": results,
-                "csv": str(Path(self.csv_path).resolve()),
+                "csv": str(csv_path.resolve()),
+                "db": str(db_path.resolve()),
+                "quizContext": quiz_context,
                 "backendVersion": BACKEND_VERSION,
             }
         finally:
             store.close()
 
-    def stats(self) -> dict[str, Any]:
-        store = QuestionStore(self.db_path)
+    def stats(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        db_path, csv_path, quiz_context = self._paths_for_payload(payload or {})
+        store = QuestionStore(db_path)
         try:
             return {
                 "ok": True,
                 "stats": store.stats(),
-                "csv": str(Path(self.csv_path).resolve()),
+                "csv": str(csv_path.resolve()),
+                "db": str(db_path.resolve()),
+                "quizContext": quiz_context,
                 "backendVersion": BACKEND_VERSION,
             }
         finally:
             store.close()
+
+    def _paths_for_payload(self, payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
+        context = _normalize_quiz_context(payload.get("quizContext"))
+        if not context.get("quizKey"):
+            return Path(self.db_path), Path(self.csv_path), context
+
+        quiz_key = str(context["quizKey"])
+        base_dir = Path(self.db_path).parent / "quizzes" / quiz_key
+        return base_dir / "questions.sqlite", base_dir / "questions.csv", context
 
     def _status_for(self, candidate: AnswerCandidate | None) -> str:
         if not candidate or not candidate.answers:
@@ -622,3 +649,44 @@ def _web_negative_cache_key(question: PageQuestion) -> str:
         sort_keys=True,
     )
     return "negative:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _normalize_quiz_context(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+
+    cmid = _clean_context_value(value.get("cmid"))
+    quiz_title = _clean_context_value(value.get("quizTitle"))
+    course_title = _clean_context_value(value.get("courseTitle"))
+    url = _clean_context_value(value.get("url"))
+    quiz_key = _clean_context_value(value.get("quizKey"))
+    if not quiz_key and (cmid or quiz_title):
+        quiz_key = _quiz_key(cmid, quiz_title)
+    if quiz_key:
+        quiz_key = _safe_quiz_key(quiz_key)
+
+    return {
+        "cmid": cmid,
+        "quizTitle": quiz_title,
+        "courseTitle": course_title,
+        "url": url,
+        "quizKey": quiz_key,
+    }
+
+
+def _clean_context_value(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _quiz_key(cmid: str, quiz_title: str) -> str:
+    identity = f"{cmid}|{quiz_title}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
+    slug_source = "-".join(part for part in [cmid, quiz_title] if part)
+    slug = re.sub(r"[^a-zA-Z0-9а-яА-ЯёЁ]+", "-", slug_source).strip("-").lower()
+    slug = slug[:64] or "quiz"
+    return _safe_quiz_key(f"{slug}-{digest}")
+
+
+def _safe_quiz_key(value: str) -> str:
+    safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", value).strip(".-")
+    return safe[:96] or "quiz"
